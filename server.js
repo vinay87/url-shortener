@@ -8,8 +8,8 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // MongoDB Connection
-mongoose.connect('mongodb://127.0.0.1:27017/urlshortener');
-
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/urlshortener';
+mongoose.connect(MONGODB_URI);
 const db = mongoose.connection;
 db.on('error', console.error.bind(console, 'Connection error:'));
 db.once('open', () => {
