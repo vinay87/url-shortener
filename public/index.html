@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>URL Shortener</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 30px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        input,
+        button {
+            padding: 10px;
+            margin: 5px;
+            font-size: 14px;
+        }
+
+        input {
+            width: 250px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .delete-btn {
+            background: #dc3545;
+        }
+
+        .delete-btn:hover {
+            background: #c82333;
+        }
+
+        .edit-btn {
+            background: #28a745;
+        }
+
+        .edit-btn:hover {
+            background: #218838;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th {
+            background: #007bff;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .short-url {
+            color: #007bff;
+            text-decoration: none;
+            font-family: monospace;
+        }
+
+        .short-url:hover {
+            text-decoration: underline;
+        }
+
+        .stats {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        h1 {
+            color: #333;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>URL Shortener - MongoDB</h1>
+
+        <div>
+            <input type="text" id="code" placeholder="Short code (optional)">
+            <input type="url" id="url" placeholder="https://example.com">
+            <button id="createBtn">Create URL</button>
+        </div>
+
+        <div class="stats" id="stats">Loading...</div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Short Code</th>
+                    <th>Original URL</th>
+                    <th>Test Short URL</th>
+                    <th>Clicks</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let editingCode = null;
+
+        async function loadData() {
+            try {
+                const res = await fetch('/api/urls');
+                const urls = await res.json();
+                displayUrls(urls);
+            } catch (err) {
+                console.log('Error loading:', err);
+            }
+        }
+
+        function displayUrls(urls) {
+            const tbody = document.getElementById('tableBody');
+            const stats = document.getElementById('stats');
+            stats.innerHTML = 'Total URLs: ' + urls.length;
+
+            if (urls.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No URLs yet. Create one!</td></tr>';
+                return;
+            }
+
+            let html = '';
+            for (let i = 0; i < urls.length; i++) {
+                const item = urls[i];
+                const code = item.shortCode;
+                const url = item.originalUrl;
+                const clicks = item.clicks;
+                const shortUrl = 'http://localhost:3000/' + code;
+
+                if (editingCode === code) {
+                    html += '<tr style="background:#fff3cd">';
+                    html += '<td><input type="text" id="newCode" value="' + code + '"></td>';
+                    html += '<td><input type="url" id="newUrl" value="' + url + '" style="width:350px"></td>';
+                    html += '<td>' + shortUrl + '</td>';
+                    html += '<td>' + clicks + '</td>';
+                    html += '<td>';
+                    html += '<button onclick="saveEdit(\'' + code + '\')" style="background:#28a745">Save</button> ';
+                    html += '<button onclick="cancelEdit()">Cancel</button>';
+                    html += '</td></tr>';
+                } else {
+                    html += '<tr>';
+                    html += '<td><strong>' + code + '</strong></td>';
+                    html += '<td>' + url + '</td>';
+                    html += '<td><a href="' + shortUrl + '" target="_blank" class="short-url">' + shortUrl + '</a></td>';
+                    html += '<td id="click-count-' + code + '">' + clicks + '</td>';
+                    html += '<td>';
+                    html += '<button onclick="editUrl(\'' + code + '\')" class="edit-btn">Edit</button> ';
+                    html += '<button onclick="deleteUrl(\'' + code + '\')" class="delete-btn">Delete</button>';
+                    html += '</td></tr>';
+                }
+            }
+            tbody.innerHTML = html;
+        }
+
+        async function createUrl() {
+            const code = document.getElementById('code').value.trim();
+            const url = document.getElementById('url').value.trim();
+
+            if (!url) {
+                alert('Please enter a URL');
+                return;
+            }
+
+            if (!url.startsWith('http')) {
+                alert('URL must start with http:// or https://');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, url })
+                });
+                const result = await res.json();
+
+                if (result.error) {
+                    alert(result.error);
+                } else {
+                    document.getElementById('code').value = '';
+                    document.getElementById('url').value = '';
+                    loadData();
+                    alert('Created: ' + result.code);
+                }
+            } catch (err) {
+                alert('Error creating URL');
+            }
+        }
+
+        async function deleteUrl(code) {
+            if (!confirm('Delete ' + code + '?')) return;
+            await fetch('/api/delete/' + code, { method: 'DELETE' });
+            loadData();
+        }
+
+        function editUrl(code) {
+            editingCode = code;
+            loadData();
+        }
+
+        async function saveEdit(oldCode) {
+            const newCode = document.getElementById('newCode').value.trim();
+            const newUrl = document.getElementById('newUrl').value.trim();
+
+            const res = await fetch('/api/update/' + oldCode, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newCode, newUrl })
+            });
+            const result = await res.json();
+
+            if (result.error) {
+                alert(result.error);
+            } else {
+                editingCode = null;
+                loadData();
+                alert('Updated');
+            }
+        }
+
+        function cancelEdit() {
+            editingCode = null;
+            loadData();
+        }
+
+        document.getElementById('createBtn').onclick = createUrl;
+        loadData();
+
+        // Auto refresh every 3 seconds
+        setInterval(() => {
+            if (editingCode === null) {
+                loadData();
+            }
+        }, 3000);
+    </script>
+</body>
+
+</html>
